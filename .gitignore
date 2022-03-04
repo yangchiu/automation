@@ -3,3 +3,6 @@ kubeconfig
 .idea
 k3s.yaml
 .terraform
+*.hcl
+*.tfstate
+*.backup

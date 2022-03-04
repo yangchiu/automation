@@ -70,6 +70,22 @@ resource "aws_security_group" "aws_secgrp_controlplane" {
   }
 
   ingress {
+    description = "Allow node port"
+    from_port   = 30007
+    to_port     = 30007
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    description = "Allow web"
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
     description = "Allow UDP connection for longhorn-webhooks"
     from_port   = 0
     to_port     = 65535

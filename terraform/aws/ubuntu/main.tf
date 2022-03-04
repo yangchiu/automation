@@ -1,0 +1,394 @@
+terraform {
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 3.0"
+    }
+  }
+}
+
+provider "aws" {
+  region = var.aws_region
+  access_key = var.aws_access_key
+  secret_key = var.aws_secret_key
+}
+
+# Create a random string suffix for instance names
+resource "random_string" "random_suffix" {
+  length           = 8
+  special          = false
+  lower            = true
+  upper            = false
+}
+
+# Create a VPC
+resource "aws_vpc" "aws_vpc" {
+  cidr_block = "10.0.0.0/16"
+
+  tags = {
+    Name = "${var.aws_vpc_name}-${random_string.random_suffix.id}"
+  }
+}
+
+# Create internet gateway
+resource "aws_internet_gateway" "aws_igw" {
+  vpc_id = aws_vpc.aws_vpc.id
+
+  tags = {
+    Name = "igw"
+  }
+}
+
+# Create controlplane security group
+resource "aws_security_group" "aws_secgrp_controlplane" {
+  name        = "aws_secgrp_controlplane"
+  description = "Allow all inbound traffic"
+  vpc_id      = aws_vpc.aws_vpc.id
+
+  ingress {
+    description = "Allow SSH"
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    description = "Allow k8s API server port"
+    from_port   = 6443
+    to_port     = 6443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    description = "Allow k8s API server port"
+    from_port   = 2379
+    to_port     = 2379
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    description = "Allow UDP connection for longhorn-webhooks"
+    from_port   = 0
+    to_port     = 65535
+    protocol    = "udp"
+    cidr_blocks = ["10.0.0.0/8"]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "aws_sec_grp_controlplane-${random_string.random_suffix.id}"
+  }
+}
+
+
+# Create worker security group
+resource "aws_security_group" "aws_secgrp_worker" {
+  name        = "aws_secgrp_worker"
+  description = "Allow all inbound traffic"
+  vpc_id      = aws_vpc.aws_vpc.id
+
+  ingress {
+    description = "Allow All Traffic from VPC CIDR block"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = [aws_vpc.aws_vpc.cidr_block]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "aws_sec_grp_worker-${random_string.random_suffix.id}"
+  }
+}
+
+
+# Create Public subnet
+resource "aws_subnet" "aws_public_subnet" {
+  vpc_id     = aws_vpc.aws_vpc.id
+  availability_zone = var.aws_availability_zone
+  cidr_block = "10.0.1.0/24"
+
+  tags = {
+    Name = "public_subnet-${random_string.random_suffix.id}"
+  }
+}
+
+# Create private subnet
+resource "aws_subnet" "aws_private_subnet" {
+  vpc_id     = aws_vpc.aws_vpc.id
+  availability_zone = var.aws_availability_zone
+  cidr_block = "10.0.2.0/24"
+
+  tags = {
+    Name = "private_subnet-${random_string.random_suffix.id}"
+  }
+}
+
+# Create EIP for NATGW
+resource "aws_eip" "aws_eip_nat_gw" {
+  vpc      = true
+
+  tags = {
+    Name = "eip_nat_gw-${random_string.random_suffix.id}"
+  }
+}
+
+# Create nat gateway
+resource "aws_nat_gateway" "aws_nat_gw" {
+  depends_on = [
+    aws_internet_gateway.aws_igw,
+    aws_eip.aws_eip_nat_gw,
+    aws_subnet.aws_public_subnet,
+    aws_subnet.aws_private_subnet
+  ]
+
+  allocation_id = aws_eip.aws_eip_nat_gw.id
+  subnet_id     = aws_subnet.aws_public_subnet.id
+
+  tags = {
+    Name = "eip_nat_gw-${random_string.random_suffix.id}"
+  }
+}
+
+# Create route table for public subnets
+resource "aws_route_table" "aws_public_rt" {
+  depends_on = [
+    aws_internet_gateway.aws_igw,
+  ]
+
+  vpc_id = aws_vpc.aws_vpc.id
+
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.aws_igw.id
+  }
+
+  tags = {
+    Name = "aws_public_rt-${random_string.random_suffix.id}"
+  }
+}
+
+# Create route table for private subnets
+resource "aws_route_table" "aws_private_rt" {
+  depends_on = [
+    aws_nat_gateway.aws_nat_gw
+  ]
+
+  vpc_id = aws_vpc.aws_vpc.id
+
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_nat_gateway.aws_nat_gw.id
+  }
+
+  tags = {
+    Name = "aws_private_rt-${random_string.random_suffix.id}"
+  }
+}
+
+# Associate public subnet to public route table
+resource "aws_route_table_association" "aws_public_subnet_rt_association" {
+  depends_on = [
+    aws_subnet.aws_public_subnet,
+    aws_route_table.aws_public_rt
+  ]
+
+  subnet_id      = aws_subnet.aws_public_subnet.id
+  route_table_id = aws_route_table.aws_public_rt.id
+}
+
+# Associate private subnet to private route table
+resource "aws_route_table_association" "aws_private_subnet_rt_association" {
+  depends_on = [
+    aws_subnet.aws_private_subnet,
+    aws_route_table.aws_private_rt
+  ]
+
+  subnet_id      = aws_subnet.aws_private_subnet.id
+  route_table_id = aws_route_table.aws_private_rt.id
+}
+
+# Create AWS key pair
+resource "aws_key_pair" "aws_pair_key" {
+  key_name   = format("%s_%s", "aws_key_pair", "${random_string.random_suffix.id}")
+  public_key = file(var.aws_ssh_public_key_file_path)
+}
+
+# Create cluster secret (used for k3s on k3s only)
+resource "random_password" "k3s_cluster_secret" {
+  length = var.k8s_distro_name == "k3s" ? 64 : 0
+  special = false
+}
+
+# Create controlplane instances
+resource "aws_instance" "aws_instance_controlplane" {
+ depends_on = [
+    aws_subnet.aws_public_subnet,
+  ]
+
+  count = var.aws_instance_count_controlplane
+
+  availability_zone = var.aws_availability_zone
+
+  ami           = data.aws_ami.aws_ami_ubuntu.id
+  instance_type = var.aws_instance_type_controlplane
+
+  subnet_id = aws_subnet.aws_public_subnet.id
+  vpc_security_group_ids = [
+    aws_security_group.aws_secgrp_controlplane.id
+  ]
+
+  root_block_device {
+    delete_on_termination = true
+    volume_size = var.aws_instance_root_block_device_size_controlplane
+  }
+
+  key_name = aws_key_pair.aws_pair_key.key_name
+  user_data = var.k8s_distro_name == "k3s" ? data.template_file.provision_k3s_server.rendered : file("${path.module}/user-data-scripts/provision_rke.sh")
+
+  tags = {
+    Name = "${var.aws_instance_name_controlplane}-${count.index}-${random_string.random_suffix.id}"
+  }
+}
+
+resource "aws_eip" "aws_eip_controlplane" {
+  count    = var.aws_instance_count_controlplane
+  vpc      = true
+}
+
+# Associate every EIP with controlplane instance
+resource "aws_eip_association" "aws_eip_assoc" {
+  depends_on = [
+    aws_instance.aws_instance_controlplane,
+    aws_eip.aws_eip_controlplane
+  ]
+
+  count    = var.aws_instance_count_controlplane
+
+  instance_id   = element(aws_instance.aws_instance_controlplane, count.index).id
+  allocation_id = element(aws_eip.aws_eip_controlplane, count.index).id
+}
+
+# Create worker instances
+resource "aws_instance" "aws_instance_worker" {
+  depends_on = [
+    aws_internet_gateway.aws_igw,
+    aws_subnet.aws_private_subnet,
+    aws_instance.aws_instance_controlplane
+  ]
+
+  count = var.aws_instance_count_worker
+
+  availability_zone = var.aws_availability_zone
+
+  ami           = data.aws_ami.aws_ami_ubuntu.id
+  instance_type = var.aws_instance_type_worker
+
+  subnet_id = aws_subnet.aws_private_subnet.id
+  vpc_security_group_ids = [
+    aws_security_group.aws_secgrp_worker.id
+  ]
+
+  root_block_device {
+    delete_on_termination = true
+    volume_size = var.aws_instance_root_block_device_size_worker
+  }
+
+  key_name = aws_key_pair.aws_pair_key.key_name
+
+  user_data = var.k8s_distro_name == "k3s" ? data.template_file.provision_k3s_agent.rendered : file("${path.module}/user-data-scripts/provision_rke.sh")
+
+  tags = {
+    Name = "${var.aws_instance_name_worker}-${count.index}-${random_string.random_suffix.id}"
+  }
+}
+
+# wait for docker to start on controlplane instances (for rke on rke only)
+resource "null_resource" "wait_for_docker_start_controlplane" {
+  depends_on = [
+    aws_instance.aws_instance_controlplane,
+    aws_instance.aws_instance_worker,
+    aws_eip.aws_eip_controlplane,
+    aws_eip_association.aws_eip_assoc
+  ]
+
+  count = var.aws_instance_count_controlplane
+
+  provisioner "remote-exec" {
+
+    inline = var.k8s_distro_name == "rke" ? ["until( systemctl is-active docker.service ); do echo \"waiting for docker to start \"; sleep 2; done"] : null
+
+    connection {
+      type     = "ssh"
+      user     = "ubuntu"
+      host     = element(aws_eip.aws_eip_controlplane, count.index).public_ip
+      private_key = file(var.aws_ssh_private_key_file_path)
+    }
+  }
+}
+
+# wait for docker to start on worker instances (for rke on rke only)
+resource "null_resource" "wait_for_docker_start_worker" {
+  depends_on = [
+    aws_instance.aws_instance_controlplane,
+    aws_instance.aws_instance_worker,
+    aws_eip.aws_eip_controlplane,
+    aws_eip_association.aws_eip_assoc
+  ]
+
+  count = var.aws_instance_count_worker
+
+  provisioner "remote-exec" {
+    inline = var.k8s_distro_name == "rke" ? ["until( systemctl is-active docker.service ); do echo \"waiting for docker to start \"; sleep 2; done"] : null
+
+    connection {
+      type     = "ssh"
+      user     = "ubuntu"
+      host     = element(aws_instance.aws_instance_worker, count.index).private_ip
+      private_key = file(var.aws_ssh_private_key_file_path)
+      bastion_user     = "ubuntu"
+      bastion_host     = aws_eip.aws_eip_controlplane[0].public_ip
+      bastion_private_key = file(var.aws_ssh_private_key_file_path)
+    }
+  }
+}
+
+# Download KUBECONFIG file (for k3s k3s only)
+resource "null_resource" "rsync_kubeconfig_file" {
+  depends_on = [
+    aws_instance.aws_instance_controlplane,
+    aws_eip.aws_eip_controlplane,
+    aws_eip_association.aws_eip_assoc
+  ]
+
+  provisioner "remote-exec" {
+    inline = var.k8s_distro_name == "k3s" ? ["until([ -f /etc/rancher/k3s/k3s.yaml ] && [ `sudo /usr/local/bin/kubectl get node -o jsonpath='{.items[*].status.conditions}'  | jq '.[] | select(.type  == \"Ready\").status' | grep -ci true` -eq 4 ]); do echo \"waiting for k3s cluster nodes to be running\"; sleep 2; done"] : null
+
+
+    connection {
+      type     = "ssh"
+      user     = "ubuntu"
+      host     = aws_eip.aws_eip_controlplane[0].public_ip
+      private_key = file(var.aws_ssh_private_key_file_path)
+    }
+  }
+
+  provisioner "local-exec" {
+    command = var.k8s_distro_name == "k3s" ? "rsync -aPvz --rsync-path=\"sudo rsync\" -e \"ssh -o StrictHostKeyChecking=no -l ubuntu -i ${var.aws_ssh_private_key_file_path}\" ${aws_eip.aws_eip_controlplane[0].public_ip}:/etc/rancher/k3s/k3s.yaml .  && sed -i 's#https://127.0.0.1:6443#https://${aws_eip.aws_eip_controlplane[0].public_ip}:6443#' k3s.yaml"  : "echo \"rke ... skipping\""
+  }
+}

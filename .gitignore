@@ -1,2 +1,4 @@
 auth
 kubeconfig
+.idea
+k3s.yaml

@@ -141,7 +141,7 @@ create_aws_secret(){
 	yq e -i '.data.AWS_SECRET_ACCESS_KEY |= "'${AWS_SECRET_ACCESS_KEY_BASE64}'"' "aws_cred_secrets.yml"
 	yq e -i '.data.AWS_DEFAULT_REGION |= "'${AWS_DEFAULT_REGION_BASE64}'"' "aws_cred_secrets.yml"
 
-	kubectl apply -f "aws_cred_secrets.yml"
+	kubectl apply -f "aws_cred_secrets.yml" -n ${LONGHORN_NAMESPACE}
 }
 
 create_longhorn_ui_nodeport() {

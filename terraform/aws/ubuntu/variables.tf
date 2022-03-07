@@ -23,11 +23,6 @@ variable "aws_availability_zone" {
   default     = "us-east-1c"
 }
 
-variable "aws_vpc_name" {
-  type        = string
-  default     = "vpc-deerone"
-}
-
 variable "arch" {
   type        = string
   description = "available values (amd64, arm64)"
@@ -51,11 +46,6 @@ variable "aws_instance_count_controlplane" {
 variable "aws_instance_count_worker" {
   type        = number
   default     = 3
-}
-
-variable "aws_instance_name_controlplane" {
-  type        = string
-  default     = "deerone-controlplane"
 }
 
 variable "aws_instance_type_controlplane" {
@@ -83,11 +73,6 @@ variable "aws_ssh_public_key_file_path" {
 variable "aws_ssh_private_key_file_path" {
   type        = string
   default     = "~/.ssh/id_rsa"
-}
-
-variable "aws_instance_name_worker" {
-  type        = string
-  default     = "deerone-worker"
 }
 
 variable "aws_instance_root_block_device_size_worker" {

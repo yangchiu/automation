@@ -45,6 +45,7 @@ LONGHORN_MANAGER_REPO_URI="https://github.com/longhorn/longhorn-manager.git"
 LONGHORN_MANAGER_BRANCH="v1.2.x"
 CUSTOM_LONGHORN_MANAGER_IMAGE="longhornio/longhorn-manager:v1.2.x-head"
 CUSTOM_LONGHORN_ENGINE_IMAGE="longhornio/longhorn-engine:v1.2.x-head"
+CUSTOM_LONGHORN_UI_IMAGE="longhornio/longhorn-ui:v1.2.x-head"
 
 
 generate_longhorn_yaml_manifest() {
@@ -55,6 +56,7 @@ generate_longhorn_yaml_manifest() {
 
     CUSTOM_LONGHORN_MANAGER_IMAGE=${CUSTOM_LONGHORN_MANAGER_IMAGE:-"longhornio/longhorn-manager:master-head"}
     CUSTOM_LONGHORN_ENGINE_IMAGE=${CUSTOM_LONGHORN_ENGINE_IMAGE:-"longhornio/longhorn-engine:master-head"}
+    CUSTOM_LONGHORN_UI_IMAGE=${CUSTOM_LONGHORN_UI_IMAGE:-"longhornio/longhorn-ui:master-head"}
 
     CUSTOM_LONGHORN_INSTANCE_MANAGER_IMAGE=${CUSTOM_LONGHORN_INSTANCE_MANAGER_IMAGE:-""}
     CUSTOM_LONGHORN_SHARE_MANAGER_IMAGE=${CUSTOM_LONGHORN_SHARE_MANAGER_IMAGE:-""}
@@ -74,6 +76,7 @@ generate_longhorn_yaml_manifest() {
 	# get longhorn default images from yaml manifest
     LONGHORN_MANAGER_IMAGE=`grep -io "longhornio\/longhorn-manager:.*$" "longhorn.yaml"| head -1`
     LONGHORN_ENGINE_IMAGE=`grep -io "longhornio\/longhorn-engine:.*$" "longhorn.yaml"| head -1`
+    LONGHORN_UI_IMAGE=`grep -io "longhornio\/longhorn-ui:.*$" "longhorn.yaml"| head -1`
     LONGHORN_INSTANCE_MANAGER_IMAGE=`grep -io "longhornio\/longhorn-instance-manager:.*$" "longhorn.yaml"| head -1`
     LONGHORN_SHARE_MANAGER_IMAGE=`grep -io "longhornio\/longhorn-share-manager:.*$" "longhorn.yaml"| head -1`
     LONGHORN_BACKING_IMAGE_MANAGER_IMAGE=`grep -io "longhornio\/backing-image-manager:.*$" "longhorn.yaml"| head -1`
@@ -81,6 +84,7 @@ generate_longhorn_yaml_manifest() {
 	# replace longhorn images with custom images
     sed -i 's#'${LONGHORN_MANAGER_IMAGE}'#'${CUSTOM_LONGHORN_MANAGER_IMAGE}'#' "longhorn.yaml"
     sed -i 's#'${LONGHORN_ENGINE_IMAGE}'#'${CUSTOM_LONGHORN_ENGINE_IMAGE}'#' "longhorn.yaml"
+    sed -i 's#'${LONGHORN_UI_IMAGE}'#'${CUSTOM_LONGHORN_UI_IMAGE}'#' "longhorn.yaml"
 
 	# replace images if custom image is specified.
 	if [[ ! -z ${CUSTOM_LONGHORN_INSTANCE_MANAGER_IMAGE} ]]; then
@@ -107,7 +111,7 @@ generate_longhorn_yaml_manifest() {
 }
 
 
-install_longhorn_master(){
+install_longhorn(){
 	LONGHORN_MANIFEST_FILE_PATH="${1}"
 
 	kubectl apply -f "${LONGHORN_MANIFEST_FILE_PATH}"
@@ -140,6 +144,10 @@ create_aws_secret(){
 	kubectl apply -f "aws_cred_secrets.yml"
 }
 
+create_longhorn_ui_nodeport() {
+  kubectl apply -f "ui-nodeport.yml" -n ${LONGHORN_NAMESPACE}
+}
+
 
 main(){
 	create_longhorn_namespace
@@ -151,9 +159,8 @@ main(){
 	set -x
 	install_csi_snapshotter_crds
 	generate_longhorn_yaml_manifest
-
-	install_longhorn_master "longhorn.yaml"
-
+	install_longhorn "longhorn.yaml"
+  create_longhorn_ui_nodeport
 }
 
 main

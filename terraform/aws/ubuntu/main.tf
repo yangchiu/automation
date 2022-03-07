@@ -26,7 +26,7 @@ resource "aws_vpc" "aws_vpc" {
   cidr_block = "10.0.0.0/16"
 
   tags = {
-    Name = "${var.name_prefix}-vpc-${random_string.random_suffix.id}"
+    Name = "${var.name_prefix}-vpc"
   }
 }
 
@@ -86,6 +86,30 @@ resource "aws_security_group" "aws_secgrp_controlplane" {
   }
 
   ingress {
+    description = "Allow tls"
+    from_port = 443
+    to_port = 443
+    protocol = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    description = "Allow web demo"
+    from_port   = 8000
+    to_port     = 8000
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    description = "Allow web demo 2"
+    from_port   = 8080
+    to_port     = 8080
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
     description = "Allow UDP connection for longhorn-webhooks"
     from_port   = 0
     to_port     = 65535
@@ -101,16 +125,55 @@ resource "aws_security_group" "aws_secgrp_controlplane" {
   }
 
   tags = {
-    Name = "${var.name_prefix}-secgrp-controlplane-${random_string.random_suffix.id}"
+    Name = "${var.name_prefix}-secgrp-controlplane"
   }
 }
-
 
 # Create worker security group
 resource "aws_security_group" "aws_secgrp_worker" {
   name        = "${var.name_prefix}-secgrp-worker"
   description = "Allow all inbound traffic"
   vpc_id      = aws_vpc.aws_vpc.id
+
+  ingress {
+    description = "Allow SSH"
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    description = "Allow web"
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    description = "Allow tls"
+    from_port = 443
+    to_port = 443
+    protocol = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    description = "Allow web demo"
+    from_port   = 8000
+    to_port     = 8000
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    description = "Allow web demo 2"
+    from_port   = 8080
+    to_port     = 8080
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
 
   ingress {
     description = "Allow All Traffic from VPC CIDR block"
@@ -128,10 +191,9 @@ resource "aws_security_group" "aws_secgrp_worker" {
   }
 
   tags = {
-    Name = "${var.name_prefix}-secgrp-worker-${random_string.random_suffix.id}"
+    Name = "${var.name_prefix}-secgrp-worker"
   }
 }
-
 
 # Create Public subnet
 resource "aws_subnet" "aws_public_subnet" {
@@ -140,7 +202,7 @@ resource "aws_subnet" "aws_public_subnet" {
   cidr_block = "10.0.1.0/24"
 
   tags = {
-    Name = "${var.name_prefix}-public-subnet-${random_string.random_suffix.id}"
+    Name = "${var.name_prefix}-public-subnet"
   }
 }
 
@@ -151,33 +213,7 @@ resource "aws_subnet" "aws_private_subnet" {
   cidr_block = "10.0.2.0/24"
 
   tags = {
-    Name = "${var.name_prefix}-private-subnet-${random_string.random_suffix.id}"
-  }
-}
-
-# Create EIP for NATGW
-resource "aws_eip" "aws_eip_nat_gw" {
-  vpc      = true
-
-  tags = {
-    Name = "${var.name_prefix}-eip-nat-gw-${random_string.random_suffix.id}"
-  }
-}
-
-# Create nat gateway
-resource "aws_nat_gateway" "aws_nat_gw" {
-  depends_on = [
-    aws_internet_gateway.aws_igw,
-    aws_eip.aws_eip_nat_gw,
-    aws_subnet.aws_public_subnet,
-    aws_subnet.aws_private_subnet
-  ]
-
-  allocation_id = aws_eip.aws_eip_nat_gw.id
-  subnet_id     = aws_subnet.aws_public_subnet.id
-
-  tags = {
-    Name = "${var.name_prefix}-eip-nat-gw-${random_string.random_suffix.id}"
+    Name = "${var.name_prefix}-private-subnet"
   }
 }
 
@@ -195,25 +231,25 @@ resource "aws_route_table" "aws_public_rt" {
   }
 
   tags = {
-    Name = "${var.name_prefix}-public-rt-${random_string.random_suffix.id}"
+    Name = "${var.name_prefix}-public-rt"
   }
 }
 
 # Create route table for private subnets
 resource "aws_route_table" "aws_private_rt" {
   depends_on = [
-    aws_nat_gateway.aws_nat_gw
+    aws_internet_gateway.aws_igw,
   ]
 
   vpc_id = aws_vpc.aws_vpc.id
 
   route {
     cidr_block = "0.0.0.0/0"
-    gateway_id = aws_nat_gateway.aws_nat_gw.id
+    gateway_id = aws_internet_gateway.aws_igw.id
   }
 
   tags = {
-    Name = "${var.name_prefix}-private-rt-${random_string.random_suffix.id}"
+    Name = "${var.name_prefix}-private-rt"
   }
 }
 
@@ -269,6 +305,8 @@ resource "aws_instance" "aws_instance_controlplane" {
     aws_security_group.aws_secgrp_controlplane.id
   ]
 
+  associate_public_ip_address = true
+
   root_block_device {
     delete_on_termination = true
     volume_size = var.aws_instance_root_block_device_size_controlplane
@@ -278,7 +316,7 @@ resource "aws_instance" "aws_instance_controlplane" {
   user_data = var.k8s_distro_name == "k3s" ? data.template_file.provision_k3s_server.rendered : file("${path.module}/user-data-scripts/provision_rke.sh")
 
   tags = {
-    Name = "${var.name_prefix}-controlplane-${count.index}-${random_string.random_suffix.id}"
+    Name = "${var.name_prefix}-controlplane-${count.index}"
   }
 }
 
@@ -320,6 +358,8 @@ resource "aws_instance" "aws_instance_worker" {
     aws_security_group.aws_secgrp_worker.id
   ]
 
+  associate_public_ip_address = true
+
   root_block_device {
     delete_on_termination = true
     volume_size = var.aws_instance_root_block_device_size_worker
@@ -330,7 +370,7 @@ resource "aws_instance" "aws_instance_worker" {
   user_data = var.k8s_distro_name == "k3s" ? data.template_file.provision_k3s_agent.rendered : file("${path.module}/user-data-scripts/provision_rke.sh")
 
   tags = {
-    Name = "${var.name_prefix}-worker-${count.index}-${random_string.random_suffix.id}"
+    Name = "${var.name_prefix}-worker-${count.index}"
   }
 }
 

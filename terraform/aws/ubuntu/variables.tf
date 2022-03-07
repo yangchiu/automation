@@ -1,3 +1,8 @@
+variable "name_prefix" {
+  type    = string
+  default = "yangchiu"
+}
+
 variable "aws_access_key" {
   type        = string
   description = "AWS ACCESS_KEY"

@@ -26,7 +26,7 @@ resource "aws_vpc" "aws_vpc" {
   cidr_block = "10.0.0.0/16"
 
   tags = {
-    Name = "${var.aws_vpc_name}-${random_string.random_suffix.id}"
+    Name = "${var.name_prefix}-vpc-${random_string.random_suffix.id}"
   }
 }
 
@@ -35,13 +35,13 @@ resource "aws_internet_gateway" "aws_igw" {
   vpc_id = aws_vpc.aws_vpc.id
 
   tags = {
-    Name = "igw"
+    Name = "${var.name_prefix}-igw"
   }
 }
 
 # Create controlplane security group
 resource "aws_security_group" "aws_secgrp_controlplane" {
-  name        = "aws_secgrp_controlplane"
+  name        = "${var.name_prefix}-secgrp-controlplane"
   description = "Allow all inbound traffic"
   vpc_id      = aws_vpc.aws_vpc.id
 
@@ -101,14 +101,14 @@ resource "aws_security_group" "aws_secgrp_controlplane" {
   }
 
   tags = {
-    Name = "aws_sec_grp_controlplane-${random_string.random_suffix.id}"
+    Name = "${var.name_prefix}-secgrp-controlplane-${random_string.random_suffix.id}"
   }
 }
 
 
 # Create worker security group
 resource "aws_security_group" "aws_secgrp_worker" {
-  name        = "aws_secgrp_worker"
+  name        = "${var.name_prefix}-secgrp-worker"
   description = "Allow all inbound traffic"
   vpc_id      = aws_vpc.aws_vpc.id
 
@@ -128,7 +128,7 @@ resource "aws_security_group" "aws_secgrp_worker" {
   }
 
   tags = {
-    Name = "aws_sec_grp_worker-${random_string.random_suffix.id}"
+    Name = "${var.name_prefix}-secgrp-worker-${random_string.random_suffix.id}"
   }
 }
 
@@ -140,7 +140,7 @@ resource "aws_subnet" "aws_public_subnet" {
   cidr_block = "10.0.1.0/24"
 
   tags = {
-    Name = "public_subnet-${random_string.random_suffix.id}"
+    Name = "${var.name_prefix}-public-subnet-${random_string.random_suffix.id}"
   }
 }
 
@@ -151,7 +151,7 @@ resource "aws_subnet" "aws_private_subnet" {
   cidr_block = "10.0.2.0/24"
 
   tags = {
-    Name = "private_subnet-${random_string.random_suffix.id}"
+    Name = "${var.name_prefix}-private-subnet-${random_string.random_suffix.id}"
   }
 }
 
@@ -160,7 +160,7 @@ resource "aws_eip" "aws_eip_nat_gw" {
   vpc      = true
 
   tags = {
-    Name = "eip_nat_gw-${random_string.random_suffix.id}"
+    Name = "${var.name_prefix}-eip-nat-gw-${random_string.random_suffix.id}"
   }
 }
 
@@ -177,7 +177,7 @@ resource "aws_nat_gateway" "aws_nat_gw" {
   subnet_id     = aws_subnet.aws_public_subnet.id
 
   tags = {
-    Name = "eip_nat_gw-${random_string.random_suffix.id}"
+    Name = "${var.name_prefix}-eip-nat-gw-${random_string.random_suffix.id}"
   }
 }
 
@@ -195,7 +195,7 @@ resource "aws_route_table" "aws_public_rt" {
   }
 
   tags = {
-    Name = "aws_public_rt-${random_string.random_suffix.id}"
+    Name = "${var.name_prefix}-public-rt-${random_string.random_suffix.id}"
   }
 }
 
@@ -213,7 +213,7 @@ resource "aws_route_table" "aws_private_rt" {
   }
 
   tags = {
-    Name = "aws_private_rt-${random_string.random_suffix.id}"
+    Name = "${var.name_prefix}-private-rt-${random_string.random_suffix.id}"
   }
 }
 
@@ -278,7 +278,7 @@ resource "aws_instance" "aws_instance_controlplane" {
   user_data = var.k8s_distro_name == "k3s" ? data.template_file.provision_k3s_server.rendered : file("${path.module}/user-data-scripts/provision_rke.sh")
 
   tags = {
-    Name = "${var.aws_instance_name_controlplane}-${count.index}-${random_string.random_suffix.id}"
+    Name = "${var.name_prefix}-controlplane-${count.index}-${random_string.random_suffix.id}"
   }
 }
 
@@ -330,7 +330,7 @@ resource "aws_instance" "aws_instance_worker" {
   user_data = var.k8s_distro_name == "k3s" ? data.template_file.provision_k3s_agent.rendered : file("${path.module}/user-data-scripts/provision_rke.sh")
 
   tags = {
-    Name = "${var.aws_instance_name_worker}-${count.index}-${random_string.random_suffix.id}"
+    Name = "${var.name_prefix}-worker-${count.index}-${random_string.random_suffix.id}"
   }
 }
 

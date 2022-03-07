@@ -1,4 +1,6 @@
 auth
+aws_cred_secrets.yml
+longhorn.yaml
 kubeconfig
 .idea
 k3s.yaml

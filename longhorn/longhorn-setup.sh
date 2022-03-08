@@ -145,21 +145,21 @@ create_aws_secret(){
 }
 
 create_longhorn_ui_nodeport() {
-  kubectl apply -f "ui-nodeport.yml" -n ${LONGHORN_NAMESPACE}
+  kubectl apply -f "ui-nodeport.yaml" -n ${LONGHORN_NAMESPACE}
 }
 
 
 main(){
-	create_longhorn_namespace
-	install_backupstores
+	#create_longhorn_namespace
+	#install_backupstores
 	# set debugging mode off to avoid leaking aws secrets to the logs.
 	# DON'T REMOVE!
-	set +x
+	#set +x
 	create_aws_secret
-	set -x
-	install_csi_snapshotter_crds
-	generate_longhorn_yaml_manifest
-	install_longhorn "longhorn.yaml"
+	#set -x
+	#install_csi_snapshotter_crds
+	#generate_longhorn_yaml_manifest
+	#install_longhorn "longhorn.yaml"
   create_longhorn_ui_nodeport
 }
 

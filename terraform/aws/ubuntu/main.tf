@@ -448,3 +448,123 @@ resource "null_resource" "rsync_kubeconfig_file" {
     command = var.k8s_distro_name == "k3s" ? "rsync -aPvz --rsync-path=\"sudo rsync\" -e \"ssh -o StrictHostKeyChecking=no -l ubuntu -i ${var.aws_ssh_private_key_file_path}\" ${aws_eip.aws_eip_controlplane[0].public_ip}:/etc/rancher/k3s/k3s.yaml .  && sed -i 's#https://127.0.0.1:6443#https://${aws_eip.aws_eip_controlplane[0].public_ip}:6443#' k3s.yaml"  : "echo \"rke ... skipping\""
   }
 }
+
+# cluster 2 start
+
+# Create cluster secret (used for k3s on k3s only)
+resource "random_password" "k3s_cluster2_cluster_secret" {
+  length = var.k8s_distro_name == "k3s" ? 64 : 0
+  special = false
+}
+
+# Create controlplane instances
+resource "aws_instance" "aws_instance_cluster2_controlplane" {
+ depends_on = [
+    aws_subnet.aws_public_subnet,
+  ]
+
+  count = var.aws_instance_count_controlplane
+
+  availability_zone = var.aws_availability_zone
+
+  ami           = data.aws_ami.aws_ami_ubuntu.id
+  instance_type = var.aws_instance_type_controlplane
+
+  subnet_id = aws_subnet.aws_public_subnet.id
+  vpc_security_group_ids = [
+    aws_security_group.aws_secgrp_controlplane.id
+  ]
+
+  associate_public_ip_address = true
+
+  root_block_device {
+    delete_on_termination = true
+    volume_size = var.aws_instance_root_block_device_size_controlplane
+  }
+
+  key_name = aws_key_pair.aws_pair_key.key_name
+  user_data = var.k8s_distro_name == "k3s" ? data.template_file.provision_k3s_cluster2_server.rendered : file("${path.module}/user-data-scripts/provision_rke.sh")
+
+  tags = {
+    Name = "${var.name_prefix}-cluster2-controlplane-${count.index}"
+  }
+}
+
+resource "aws_eip" "aws_eip_cluster2_controlplane" {
+  count    = var.aws_instance_count_controlplane
+  vpc      = true
+}
+
+# Associate every EIP with controlplane instance
+resource "aws_eip_association" "aws_eip_assoc_cluster2" {
+  depends_on = [
+    aws_instance.aws_instance_cluster2_controlplane,
+    aws_eip.aws_eip_cluster2_controlplane
+  ]
+
+  count    = var.aws_instance_count_controlplane
+
+  instance_id   = element(aws_instance.aws_instance_cluster2_controlplane, count.index).id
+  allocation_id = element(aws_eip.aws_eip_cluster2_controlplane, count.index).id
+}
+
+# Create worker instances
+resource "aws_instance" "aws_instance_cluster2_worker" {
+  depends_on = [
+    aws_internet_gateway.aws_igw,
+    aws_subnet.aws_private_subnet,
+    aws_instance.aws_instance_cluster2_controlplane
+  ]
+
+  count = var.aws_instance_count_worker
+
+  availability_zone = var.aws_availability_zone
+
+  ami           = data.aws_ami.aws_ami_ubuntu.id
+  instance_type = var.aws_instance_type_worker
+
+  subnet_id = aws_subnet.aws_private_subnet.id
+  vpc_security_group_ids = [
+    aws_security_group.aws_secgrp_worker.id
+  ]
+
+  associate_public_ip_address = true
+
+  root_block_device {
+    delete_on_termination = true
+    volume_size = var.aws_instance_root_block_device_size_worker
+  }
+
+  key_name = aws_key_pair.aws_pair_key.key_name
+
+  user_data = var.k8s_distro_name == "k3s" ? data.template_file.provision_k3s_cluster2_agent.rendered : file("${path.module}/user-data-scripts/provision_rke.sh")
+
+  tags = {
+    Name = "${var.name_prefix}-cluster2-worker-${count.index}"
+  }
+}
+
+# Download KUBECONFIG file (for k3s k3s only)
+resource "null_resource" "rsync_kubeconfig_file_cluster2" {
+  depends_on = [
+    aws_instance.aws_instance_cluster2_controlplane,
+    aws_eip.aws_eip_cluster2_controlplane,
+    aws_eip_association.aws_eip_assoc_cluster2
+  ]
+
+  provisioner "remote-exec" {
+    inline = var.k8s_distro_name == "k3s" ? ["until([ -f /etc/rancher/k3s/k3s.yaml ] && [ `sudo /usr/local/bin/kubectl get node -o jsonpath='{.items[*].status.conditions}'  | jq '.[] | select(.type  == \"Ready\").status' | grep -ci true` -eq 4 ]); do echo \"waiting for k3s cluster nodes to be running\"; sleep 2; done"] : null
+
+
+    connection {
+      type     = "ssh"
+      user     = "ubuntu"
+      host     = aws_eip.aws_eip_cluster2_controlplane[0].public_ip
+      private_key = file(var.aws_ssh_private_key_file_path)
+    }
+  }
+
+  provisioner "local-exec" {
+    command = var.k8s_distro_name == "k3s" ? "rsync -aPvz --rsync-path=\"sudo rsync\" -e \"ssh -o StrictHostKeyChecking=no -l ubuntu -i ${var.aws_ssh_private_key_file_path}\" ${aws_eip.aws_eip_cluster2_controlplane[0].public_ip}:/etc/rancher/k3s/k3s.yaml k3s_cluster2.yaml  && sed -i 's#https://127.0.0.1:6443#https://${aws_eip.aws_eip_cluster2_controlplane[0].public_ip}:6443#' k3s_cluster2.yaml"  : "echo \"rke ... skipping\""
+  }
+}

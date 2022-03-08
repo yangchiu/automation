@@ -1,6 +1,6 @@
 variable "name_prefix" {
   type    = string
-  default = "yangchiu-cluster-1"
+  default = "yang"
 }
 
 variable "aws_access_key" {

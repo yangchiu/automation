@@ -1,0 +1,27 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: test-pod-statefulset
+spec:
+  selector:
+    matchLabels:
+      app: test-pod
+  serviceName: "test-pod"
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: test-pod
+    spec:
+      containers:
+        - name: sleep
+          image: busybox
+          imagePullPolicy: IfNotPresent
+          args: [ "/bin/sh", "-c", "while true;do date;sleep 5; done" ]
+          volumeMounts:
+            - name: pod-data
+              mountPath: /data
+      volumes:
+        - name: pod-data
+          persistentVolumeClaim:
+            claimName: test-1

@@ -6,29 +6,29 @@ metadata:
 spec:
   selector:
     matchLabels:
-      app': test-statefulset
-    serviceName: test-statefulset
-    replicas: 2
-    template:
-      metadata:
-        labels:
-          app: test-statefulset
+      app: test-statefulset
+  serviceName: test-statefulset
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: test-statefulset
+    spec:
+      terminationGracePeriodSeconds: 10
+      containers:
+        - image: busybox
+          imagePullPolicy: IfNotPresent
+          name: sleep
+          args: ['/bin/sh', '-c', 'while true;do date;sleep 5; done']
+          volumeMounts:
+            - name: pod-data
+              mountPath: /data
+  volumeClaimTemplates:
+    - metadata:
+        name: pod-data
       spec:
-        terminationGracePeriodSeconds: 10
-        containers:
-          - image: busybox
-            imagePullPolicy: IfNotPresent
-            name: sleep
-            args: ['/bin/sh', '-c', 'while true;do date;sleep 5; done']
-            volumeMounts:
-              - name: pod-data
-                mountPath: /data
-        volumeClaimTemplates:
-          - metadata:
-              name: pod-data
-            spec:
-              accessModes: ['ReadWriteOnce'],
-              storageClassName: 'longhorn',
-              resources:
-                requests:
-                  storage: 1Gi
+        accessModes: ['ReadWriteOnce']
+        storageClassName: 'longhorn'
+        resources:
+          requests:
+            storage: 1Gi

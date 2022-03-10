@@ -1,0 +1,26 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: test-deployment
+  labels:
+    name: test-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      name: test-deployment
+  template:
+    metadata:
+      labels:
+        name: test-deployment
+    spec:
+      containers:
+        - name: test-deployment
+          image: nginx:stable-alpine
+          volumeMounts:
+            - name: test-pod
+              mountPath: /data
+      volumes:
+        - name: test-pod
+          persistentVolumeClaim:
+            claimName: test-1

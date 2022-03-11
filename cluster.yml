@@ -1,0 +1,14 @@
+nodes:
+    - address: 3.221.213.161
+      hostname_override: yang-controlplane-0
+      user: ubuntu
+      role:
+        - controlplane
+        - etcd
+        - worker
+bastion_host:
+    address: 3.221.213.161
+    user: ubuntu
+    port: 22
+    ssh_key_path: /home/yang/.ssh/id_rsa
+ssh_key_path: /home/yang/.ssh/id_rsa

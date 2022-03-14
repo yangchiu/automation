@@ -15,3 +15,9 @@ export.sh
 
 *.log
 *.txt
+
+kube_config_rke.yml
+rke.rkestate
+rke.yml
+rke_cluster.yaml
+rke_cluster2.yaml

@@ -15,7 +15,7 @@ data "template_file" "provision_k3s_server" {
   vars = {
     k3s_cluster_secret = random_password.k3s_cluster_secret.result
     k3s_server_public_ip = aws_eip.aws_eip_controlplane[0].public_ip
-    k3s_version =  var.k8s_distro_version
+    k3s_version =  local.k8s_distro_version
   }
 }
 
@@ -25,7 +25,7 @@ data "template_file" "provision_k3s_agent" {
   vars = {
     k3s_server_url = "https://${aws_eip.aws_eip_controlplane[0].public_ip}:6443"
     k3s_cluster_secret = random_password.k3s_cluster_secret.result
-    k3s_version =  var.k8s_distro_version
+    k3s_version =  local.k8s_distro_version
   }
 }
 
@@ -35,7 +35,7 @@ data "template_file" "provision_k3s_cluster2_server" {
   vars = {
     k3s_cluster2_cluster_secret = random_password.k3s_cluster2_cluster_secret.result
     k3s_cluster2_server_public_ip = aws_eip.aws_eip_cluster2_controlplane[0].public_ip
-    k3s_version =  var.k8s_distro_version
+    k3s_version =  local.k8s_distro_version
   }
 }
 
@@ -45,7 +45,7 @@ data "template_file" "provision_k3s_cluster2_agent" {
   vars = {
     k3s_cluster2_server_url = "https://${aws_eip.aws_eip_cluster2_controlplane[0].public_ip}:6443"
     k3s_cluster2_cluster_secret = random_password.k3s_cluster2_cluster_secret.result
-    k3s_version =  var.k8s_distro_version
+    k3s_version =  local.k8s_distro_version
   }
 }
 

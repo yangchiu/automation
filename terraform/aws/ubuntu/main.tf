@@ -13,6 +13,11 @@ provider "aws" {
   secret_key = var.aws_secret_key
 }
 
+locals {
+  instance_type = var.arch == "amd64" ? "t2.xlarge" : "a1.xlarge"
+  k8s_distro_version = var.k8s_distro_name == "k3s" ? "v1.23.1+k3s2" : "v1.22.5-rancher1-1"
+}
+
 # Create a random string suffix for instance names
 resource "random_string" "random_suffix" {
   length           = 8
@@ -298,7 +303,7 @@ resource "aws_instance" "aws_instance_controlplane" {
   availability_zone = var.aws_availability_zone
 
   ami           = data.aws_ami.aws_ami_ubuntu.id
-  instance_type = var.aws_instance_type_controlplane
+  instance_type = local.instance_type
 
   subnet_id = aws_subnet.aws_public_subnet.id
   vpc_security_group_ids = [
@@ -351,7 +356,7 @@ resource "aws_instance" "aws_instance_worker" {
   availability_zone = var.aws_availability_zone
 
   ami           = data.aws_ami.aws_ami_ubuntu.id
-  instance_type = var.aws_instance_type_worker
+  instance_type = local.instance_type
 
   subnet_id = aws_subnet.aws_private_subnet.id
   vpc_security_group_ids = [
@@ -468,7 +473,7 @@ resource "aws_instance" "aws_instance_cluster2_controlplane" {
   availability_zone = var.aws_availability_zone
 
   ami           = data.aws_ami.aws_ami_ubuntu.id
-  instance_type = var.aws_instance_type_controlplane
+  instance_type = local.instance_type
 
   subnet_id = aws_subnet.aws_public_subnet.id
   vpc_security_group_ids = [
@@ -521,7 +526,7 @@ resource "aws_instance" "aws_instance_cluster2_worker" {
   availability_zone = var.aws_availability_zone
 
   ami           = data.aws_ami.aws_ami_ubuntu.id
-  instance_type = var.aws_instance_type_worker
+  instance_type = local.instance_type
 
   subnet_id = aws_subnet.aws_private_subnet.id
   vpc_security_group_ids = [
@@ -541,6 +546,56 @@ resource "aws_instance" "aws_instance_cluster2_worker" {
 
   tags = {
     Name = "${var.name_prefix}-cluster2-worker-${count.index}"
+  }
+}
+
+# wait for docker to start on controlplane instances (for rke on rke only)
+resource "null_resource" "wait_for_docker_start_controlplane_cluster2" {
+  depends_on = [
+    aws_instance.aws_instance_cluster2_controlplane,
+    aws_instance.aws_instance_cluster2_worker,
+    aws_eip.aws_eip_cluster2_controlplane,
+    aws_eip_association.aws_eip_assoc_cluster2
+  ]
+
+  count = var.aws_instance_count_controlplane
+
+  provisioner "remote-exec" {
+
+    inline = var.k8s_distro_name == "rke" ? ["until( systemctl is-active docker.service ); do echo \"waiting for docker to start \"; sleep 2; done"] : null
+
+    connection {
+      type     = "ssh"
+      user     = "ubuntu"
+      host     = element(aws_eip.aws_eip_cluster2_controlplane, count.index).public_ip
+      private_key = file(var.aws_ssh_private_key_file_path)
+    }
+  }
+}
+
+# wait for docker to start on worker instances (for rke on rke only)
+resource "null_resource" "wait_for_docker_start_worker_cluster2" {
+  depends_on = [
+    aws_instance.aws_instance_cluster2_controlplane,
+    aws_instance.aws_instance_cluster2_worker,
+    aws_eip.aws_eip_cluster2_controlplane,
+    aws_eip_association.aws_eip_assoc_cluster2
+  ]
+
+  count = var.aws_instance_count_worker
+
+  provisioner "remote-exec" {
+    inline = var.k8s_distro_name == "rke" ? ["until( systemctl is-active docker.service ); do echo \"waiting for docker to start \"; sleep 2; done"] : null
+
+    connection {
+      type     = "ssh"
+      user     = "ubuntu"
+      host     = element(aws_instance.aws_instance_cluster2_worker, count.index).private_ip
+      private_key = file(var.aws_ssh_private_key_file_path)
+      bastion_user     = "ubuntu"
+      bastion_host     = aws_eip.aws_eip_cluster2_controlplane[0].public_ip
+      bastion_private_key = file(var.aws_ssh_private_key_file_path)
+    }
   }
 }
 

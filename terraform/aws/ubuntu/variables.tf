@@ -48,18 +48,6 @@ variable "aws_instance_count_worker" {
   default     = 3
 }
 
-variable "aws_instance_type_controlplane" {
-  type        = string
-  description = "Recommended instance types t2.xlarge for amd64 & a1.xlarge  for arm64"
-  default     = "t2.xlarge"
-}
-
-variable "aws_instance_type_worker" {
-  type        = string
-  description = "Recommended instance types t2.xlarge for amd64 & a1.xlarge  for arm64"
-  default     = "t2.xlarge"
-}
-
 variable "aws_instance_root_block_device_size_controlplane" {
   type        = number
   default     = 40
@@ -84,14 +72,4 @@ variable "k8s_distro_name" {
   type        = string
   default     = "k3s"
   description = "kubernetes distro version to install [rke, k3s]  (default: k3s)"
-}
-
-variable "k8s_distro_version" {
-  type        = string
-  default     = "v1.23.1+k3s2"
-  description = <<-EOT
-    kubernetes version that will be deployed
-    rke: (default: v1.22.5-rancher1-1)
-    k3s: (default: v1.23.1+k3s2)
-  EOT
 }

@@ -11,3 +11,5 @@ until (curl https://releases.rancher.com/install-docker/${DOCKER_VERSION}.sh | s
 done
 
 sudo usermod -aG docker ubuntu
+
+docker run -d --restart=unless-stopped -p 80:80 -p 443:443 --privileged rancher/rancher:2.5.12

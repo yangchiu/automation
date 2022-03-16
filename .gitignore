@@ -17,7 +17,9 @@ export.sh
 *.txt
 
 kube_config_rke.yml
-rke.rkestate
+*.rkestate
 rke.yml
 rke_cluster.yaml
 rke_cluster2.yaml
+
+*.tgz

@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
 
-DISTRO=rhel
-export TF_VAR_arch=arm64
-export TF_VAR_k8s_distro_name=rke2
+DISTRO=ubuntu
 
 # terminate any terraform processes
 TERRAFORM_PIDS=( `ps aux | grep -i terraform | grep -v grep | awk '{printf("%s ",$1)}'` )

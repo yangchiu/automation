@@ -2,9 +2,9 @@
 
 set -x
 
-DISTRO=rhel
-export TF_VAR_arch=arm64
-export TF_VAR_k8s_distro_name=rke2
+DISTRO=ubuntu
+export TF_VAR_arch=amd64
+export TF_VAR_k8s_distro_name=k3s
 export TF_VAR_tf_selinux_mode=enforcing
 
 if [[ ${TF_VAR_arch} == "amd64" ]]; then

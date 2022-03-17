@@ -21,5 +21,7 @@ kube_config_rke.yml
 rke.yml
 rke_cluster.yaml
 rke_cluster2.yaml
+rke2.yaml
+rke2_cluster2.yaml
 
 *.tgz

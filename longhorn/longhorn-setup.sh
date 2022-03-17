@@ -155,7 +155,7 @@ main(){
 	# set debugging mode off to avoid leaking aws secrets to the logs.
 	# DON'T REMOVE!
 	#set +x
-	create_aws_secret
+	#create_aws_secret
 	#set -x
 	#install_csi_snapshotter_crds
 	#generate_longhorn_yaml_manifest

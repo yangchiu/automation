@@ -15,7 +15,7 @@ provider "aws" {
 
 locals {
   instance_type = var.arch == "amd64" ? "t2.xlarge" : "a1.xlarge"
-  k8s_distro_version = var.k8s_distro_name == "k3s" ? "v1.23.1+k3s2" : "v1.22.5-rancher1-1"
+  k8s_distro_version = var.k8s_distro_name == "k3s" ? "v1.23.1+k3s2" : (var.k8s_distro_name == "rke" ? "v1.22.5-rancher1-1" : "v1.23.3+rke2r1")
 }
 
 # Create a random string suffix for instance names
@@ -62,6 +62,14 @@ resource "aws_security_group" "aws_secgrp_controlplane" {
     description = "Allow k8s API server port"
     from_port   = 6443
     to_port     = 6443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    description = "Allow rke2 port"
+    from_port   = 9345
+    to_port     = 9345
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
@@ -286,9 +294,9 @@ resource "aws_key_pair" "aws_pair_key" {
   public_key = file(var.aws_ssh_public_key_file_path)
 }
 
-# Create cluster secret (used for k3s on k3s only)
-resource "random_password" "k3s_cluster_secret" {
-  length = var.k8s_distro_name == "k3s" ? 64 : 0
+# Create cluster secret (used for k3s or rke2 only)
+resource "random_password" "cluster_secret" {
+  length = var.k8s_distro_name == "rke" ? 0 : 64
   special = false
 }
 
@@ -318,7 +326,7 @@ resource "aws_instance" "aws_instance_controlplane" {
   }
 
   key_name = aws_key_pair.aws_pair_key.key_name
-  user_data = var.k8s_distro_name == "k3s" ? data.template_file.provision_k3s_server.rendered : file("${path.module}/user-data-scripts/provision_rke.sh")
+  user_data = var.k8s_distro_name == "k3s" ? data.template_file.provision_k3s_server.rendered : (var.k8s_distro_name == "rke2" ? data.template_file.provision_rke2_server.rendered : file("${path.module}/user-data-scripts/provision_rke.sh"))
 
   tags = {
     Name = "${var.name_prefix}-controlplane-${count.index}"
@@ -372,7 +380,7 @@ resource "aws_instance" "aws_instance_worker" {
 
   key_name = aws_key_pair.aws_pair_key.key_name
 
-  user_data = var.k8s_distro_name == "k3s" ? data.template_file.provision_k3s_agent.rendered : file("${path.module}/user-data-scripts/provision_rke.sh")
+  user_data = var.k8s_distro_name == "k3s" ? data.template_file.provision_k3s_agent.rendered : (var.k8s_distro_name == "rke2" ? data.template_file.provision_rke2_agent.rendered : file("${path.module}/user-data-scripts/provision_rke.sh"))
 
   tags = {
     Name = "${var.name_prefix}-worker-${count.index}"
@@ -381,6 +389,7 @@ resource "aws_instance" "aws_instance_worker" {
 
 # wait for docker to start on controlplane instances (for rke on rke only)
 resource "null_resource" "wait_for_docker_start_controlplane" {
+
   depends_on = [
     aws_instance.aws_instance_controlplane,
     aws_instance.aws_instance_worker,
@@ -405,6 +414,7 @@ resource "null_resource" "wait_for_docker_start_controlplane" {
 
 # wait for docker to start on worker instances (for rke on rke only)
 resource "null_resource" "wait_for_docker_start_worker" {
+
   depends_on = [
     aws_instance.aws_instance_controlplane,
     aws_instance.aws_instance_worker,
@@ -431,6 +441,9 @@ resource "null_resource" "wait_for_docker_start_worker" {
 
 # Download KUBECONFIG file (for k3s k3s only)
 resource "null_resource" "rsync_kubeconfig_file" {
+
+  count = var.k8s_distro_name == "k3s" ? 1 : 0
+
   depends_on = [
     aws_instance.aws_instance_controlplane,
     aws_eip.aws_eip_controlplane,
@@ -454,11 +467,39 @@ resource "null_resource" "rsync_kubeconfig_file" {
   }
 }
 
+# Download KUBECONFIG file for rke2
+resource "null_resource" "rsync_kubeconfig_file_rke2" {
+
+  count = var.k8s_distro_name == "rke2" ? 1 : 0
+
+  depends_on = [
+    aws_instance.aws_instance_controlplane,
+    aws_eip.aws_eip_controlplane,
+    aws_eip_association.aws_eip_assoc
+  ]
+
+  provisioner "remote-exec" {
+    inline = var.k8s_distro_name == "rke2" ? ["until([ -f /etc/rancher/rke2/rke2.yaml ] && [ `sudo KUBECONFIG=/etc/rancher/rke2/rke2.yaml /var/lib/rancher/rke2/bin/kubectl get node -o jsonpath='{.items[*].status.conditions}'  | jq '.[] | select(.type  == \"Ready\").status' | grep -ci true` -eq $((${var.aws_instance_count_controlplane} + ${var.aws_instance_count_worker})) ]); do echo \"waiting for rke2 cluster nodes to be running\"; sleep 2; done"] : null
+
+
+    connection {
+      type     = "ssh"
+      user     = "ubuntu"
+      host     = aws_eip.aws_eip_controlplane[0].public_ip
+      private_key = file(var.aws_ssh_private_key_file_path)
+    }
+  }
+
+  provisioner "local-exec" {
+    command = var.k8s_distro_name == "rke2" ? "rsync -aPvz --rsync-path=\"sudo rsync\" -e \"ssh -o StrictHostKeyChecking=no -l ubuntu -i ${var.aws_ssh_private_key_file_path}\" ${aws_eip.aws_eip_controlplane[0].public_ip}:/etc/rancher/rke2/rke2.yaml .  && sed -i 's#https://127.0.0.1:6443#https://${aws_eip.aws_eip_controlplane[0].public_ip}:6443#' rke2.yaml" : "echo \"not rke2 ... skipping\""
+  }
+}
+
 # cluster 2 start
 
-# Create cluster secret (used for k3s on k3s only)
-resource "random_password" "k3s_cluster2_cluster_secret" {
-  length = var.k8s_distro_name == "k3s" ? 64 : 0
+# Create cluster secret (used for k3s or rke2 only)
+resource "random_password" "cluster2_secret" {
+  length = var.k8s_distro_name == "rke" ? 0 : 64
   special = false
 }
 
@@ -488,7 +529,7 @@ resource "aws_instance" "aws_instance_cluster2_controlplane" {
   }
 
   key_name = aws_key_pair.aws_pair_key.key_name
-  user_data = var.k8s_distro_name == "k3s" ? data.template_file.provision_k3s_cluster2_server.rendered : file("${path.module}/user-data-scripts/provision_rke.sh")
+  user_data = var.k8s_distro_name == "k3s" ? data.template_file.provision_k3s_cluster2_server.rendered : (var.k8s_distro_name == "rke2" ? data.template_file.provision_rke2_cluster2_server.rendered : file("${path.module}/user-data-scripts/provision_rke.sh"))
 
   tags = {
     Name = "${var.name_prefix}-cluster2-controlplane-${count.index}"
@@ -542,7 +583,7 @@ resource "aws_instance" "aws_instance_cluster2_worker" {
 
   key_name = aws_key_pair.aws_pair_key.key_name
 
-  user_data = var.k8s_distro_name == "k3s" ? data.template_file.provision_k3s_cluster2_agent.rendered : file("${path.module}/user-data-scripts/provision_rke.sh")
+  user_data = var.k8s_distro_name == "k3s" ? data.template_file.provision_k3s_cluster2_agent.rendered : (var.k8s_distro_name == "rke2" ? data.template_file.provision_rke2_cluster2_agent.rendered : file("${path.module}/user-data-scripts/provision_rke.sh"))
 
   tags = {
     Name = "${var.name_prefix}-cluster2-worker-${count.index}"
@@ -551,6 +592,7 @@ resource "aws_instance" "aws_instance_cluster2_worker" {
 
 # wait for docker to start on controlplane instances (for rke on rke only)
 resource "null_resource" "wait_for_docker_start_controlplane_cluster2" {
+
   depends_on = [
     aws_instance.aws_instance_cluster2_controlplane,
     aws_instance.aws_instance_cluster2_worker,
@@ -575,6 +617,7 @@ resource "null_resource" "wait_for_docker_start_controlplane_cluster2" {
 
 # wait for docker to start on worker instances (for rke on rke only)
 resource "null_resource" "wait_for_docker_start_worker_cluster2" {
+
   depends_on = [
     aws_instance.aws_instance_cluster2_controlplane,
     aws_instance.aws_instance_cluster2_worker,
@@ -601,6 +644,9 @@ resource "null_resource" "wait_for_docker_start_worker_cluster2" {
 
 # Download KUBECONFIG file (for k3s k3s only)
 resource "null_resource" "rsync_kubeconfig_file_cluster2" {
+
+  count = var.k8s_distro_name == "k3s" ? 1 : 0
+
   depends_on = [
     aws_instance.aws_instance_cluster2_controlplane,
     aws_eip.aws_eip_cluster2_controlplane,
@@ -621,5 +667,33 @@ resource "null_resource" "rsync_kubeconfig_file_cluster2" {
 
   provisioner "local-exec" {
     command = var.k8s_distro_name == "k3s" ? "rsync -aPvz --rsync-path=\"sudo rsync\" -e \"ssh -o StrictHostKeyChecking=no -l ubuntu -i ${var.aws_ssh_private_key_file_path}\" ${aws_eip.aws_eip_cluster2_controlplane[0].public_ip}:/etc/rancher/k3s/k3s.yaml k3s_cluster2.yaml  && sed -i 's#https://127.0.0.1:6443#https://${aws_eip.aws_eip_cluster2_controlplane[0].public_ip}:6443#' k3s_cluster2.yaml"  : "echo \"rke ... skipping\""
+  }
+}
+
+# Download KUBECONFIG file for rke2
+resource "null_resource" "rsync_kubeconfig_file_rke2_cluster2" {
+
+  count = var.k8s_distro_name == "rke2" ? 1 : 0
+
+  depends_on = [
+    aws_instance.aws_instance_cluster2_controlplane,
+    aws_eip.aws_eip_cluster2_controlplane,
+    aws_eip_association.aws_eip_assoc_cluster2
+  ]
+
+  provisioner "remote-exec" {
+    inline = var.k8s_distro_name == "rke2" ? ["until([ -f /etc/rancher/rke2/rke2.yaml ] && [ `sudo KUBECONFIG=/etc/rancher/rke2/rke2.yaml /var/lib/rancher/rke2/bin/kubectl get node -o jsonpath='{.items[*].status.conditions}'  | jq '.[] | select(.type  == \"Ready\").status' | grep -ci true` -eq $((${var.aws_instance_count_controlplane} + ${var.aws_instance_count_worker})) ]); do echo \"waiting for rke2 cluster nodes to be running\"; sleep 2; done"] : null
+
+
+    connection {
+      type     = "ssh"
+      user     = "ubuntu"
+      host     = aws_eip.aws_eip_cluster2_controlplane[0].public_ip
+      private_key = file(var.aws_ssh_private_key_file_path)
+    }
+  }
+
+  provisioner "local-exec" {
+    command = var.k8s_distro_name == "rke2" ? "rsync -aPvz --rsync-path=\"sudo rsync\" -e \"ssh -o StrictHostKeyChecking=no -l ubuntu -i ${var.aws_ssh_private_key_file_path}\" ${aws_eip.aws_eip_cluster2_controlplane[0].public_ip}:/etc/rancher/rke2/rke2.yaml rke2_cluster2.yaml  && sed -i 's#https://127.0.0.1:6443#https://${aws_eip.aws_eip_cluster2_controlplane[0].public_ip}:6443#' rke2_cluster2.yaml" : "echo \"not rke2 ... skipping\""
   }
 }

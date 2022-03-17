@@ -2,9 +2,10 @@
 
 set -x
 
-DISTRO=ubuntu
-export TF_VAR_arch=amd64
+DISTRO=rhel
+export TF_VAR_arch=arm64
 export TF_VAR_k8s_distro_name=rke2
+export TF_VAR_tf_selinux_mode=enforcing
 
 if [[ ${TF_VAR_arch} == "amd64" ]]; then
 	terraform -chdir=aws/${DISTRO} init

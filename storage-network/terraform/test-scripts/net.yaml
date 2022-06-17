@@ -1,0 +1,12 @@
+network:
+    version: 2
+    renderer: networkd
+    ethernets:
+        eth1:
+            addresses:
+                - 10.0.2.248/24
+            dhcp4: no
+            routes:
+                - to: 0.0.0.0/0
+                  via: 10.0.2.1
+                  table: 1000

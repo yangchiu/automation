@@ -1,0 +1,40 @@
+name: Backport
+on:
+  issues:
+    types: [labeled]
+jobs:
+  backport:
+    runs-on: ubuntu-latest
+    if: contains(github.event.label.name, 'backport-needed')
+    steps:
+      - name: Get Milestones
+        uses: yangchiu/milestone-action@master
+        id: milestone
+        with:
+          token: ${{ github.token }}
+          repository: ${{ github.repository }}
+      - name: Get Backport Version
+        uses: xom9ikk/split@v1
+        id: split
+        with:
+          string: ${{ github.event.label.name }}
+          separator: /
+      - name: Get Labels
+        id: labels
+        run: |
+          RAW_LABELS="${{ join(github.event.issue.labels.*.name, ' ') }}"
+          echo "RAW LABELS: $RAW_LABELS"
+          LABELS=$(echo "$RAW_LABELS" | sed -r 's/\s*backport-needed\S+//g' | sed -r 's/\s*require\/automation-e2e//g' | xargs | sed 's/ /, /g')
+          echo "LABELS: $LABELS"
+          echo "::set-output name=LABELS::$LABELS"
+      - name: Create Backport Issue
+        uses: dacbd/create-issue-action@v1
+        with:
+          token: ${{ github.token }}
+          title: |
+            [BACKPORT][v${{ steps.split.outputs._1 }}]${{ github.event.issue.title }}
+          body: |
+            backport ${{ github.event.issue.html_url }}
+          labels: ${{ steps.labels.outputs.LABELS }}
+          milestone: 1
+          assignees: ${{ join(github.event.issue.assignees.*.login, ', ') }}

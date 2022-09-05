@@ -7,6 +7,23 @@ jobs:
     runs-on: ubuntu-latest
     if: contains(github.event.label.name, 'backport-needed')
     steps:
+      - name: Get Repo Id
+        uses: octokit/request-action@v2.x
+        id: repo
+        with:
+          route: GET /repos/${{ github.repository }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+      - name: Print
+        run: |
+          echo "repo id: ${{ toJSON(steps.repo.outputs.data) }}"
+      - name: Add To Release
+        uses: yangchiu/add-zenhub-release-action@master
+        with:
+          zenhub_token: ${{ secrets.ZENHUB_TOKEN }}
+          repo_id: ${{ fromJSON(steps.repo.outputs.data).id }}
+          issue_number: ${{ github.event.issue.id }}
+          release_name: 1.4.0
       - name: Get Milestones
         uses: yangchiu/milestone-action@master
         id: milestone

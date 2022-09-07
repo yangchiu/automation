@@ -7,35 +7,19 @@ jobs:
     runs-on: ubuntu-latest
     if: contains(github.event.label.name, 'backport-needed')
     steps:
-      - name: Get Repo Id
-        uses: octokit/request-action@v2.x
-        id: repo
-        with:
-          route: GET /repos/${{ github.repository }}
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-      - name: Print
-        run: |
-          echo "repo id: ${{ toJSON(steps.repo.outputs.data) }}"
-      - name: Add To Release
-        uses: yangchiu/add-zenhub-release-action@master
-        with:
-          zenhub_token: ${{ secrets.ZENHUB_TOKEN }}
-          repo_id: ${{ fromJSON(steps.repo.outputs.data).id }}
-          issue_number: ${{ github.event.issue.id }}
-          release_name: 1.4.0
-      - name: Get Milestones
-        uses: yangchiu/milestone-action@master
-        id: milestone
-        with:
-          token: ${{ github.token }}
-          repository: ${{ github.repository }}
       - name: Get Backport Version
         uses: xom9ikk/split@v1
         id: split
         with:
           string: ${{ github.event.label.name }}
           separator: /
+      - name: Get Milestone Object
+        uses: yangchiu/milestone-action@master
+        id: milestone
+        with:
+          token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          milestone_name: v${{ steps.split.outputs._1 }}
       - name: Get Labels
         id: labels
         run: |
@@ -43,7 +27,7 @@ jobs:
           echo "RAW LABELS: $RAW_LABELS"
           LABELS=$(echo "$RAW_LABELS" | sed -r 's/\s*backport-needed\S+//g' | sed -r 's/\s*require\/automation-e2e//g' | xargs | sed 's/ /, /g')
           echo "LABELS: $LABELS"
-          echo "::set-output name=LABELS::$LABELS"
+          echo "::set-output name=labels::$LABELS"
       - name: Create Backport Issue
         uses: dacbd/create-issue-action@v1
         with:
@@ -52,6 +36,20 @@ jobs:
             [BACKPORT][v${{ steps.split.outputs._1 }}]${{ github.event.issue.title }}
           body: |
             backport ${{ github.event.issue.html_url }}
-          labels: ${{ steps.labels.outputs.LABELS }}
-          milestone: 1
+          labels: ${{ steps.labels.outputs.labels }}
+          milestone: ${{ fromJSON(steps.milestone.outputs.data).number }}
           assignees: ${{ join(github.event.issue.assignees.*.login, ', ') }}
+      - name: Get Repo Id
+        uses: octokit/request-action@v2.x
+        id: repo
+        with:
+          route: GET /repos/${{ github.repository }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+      - name: Add Backport Issue To Release
+        uses: yangchiu/add-zenhub-release-action@master
+        with:
+          zenhub_token: ${{ secrets.ZENHUB_TOKEN }}
+          repo_id: ${{ fromJSON(steps.repo.outputs.data).id }}
+          issue_number: ${{ github.event.issue.id }}
+          release_name: ${{ steps.split.outputs._1 }}

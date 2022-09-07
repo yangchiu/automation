@@ -1,4 +1,4 @@
-name: Backport
+name: Create-Issue
 on:
   issues:
     types: [labeled]

@@ -30,6 +30,7 @@ jobs:
           echo "::set-output name=labels::$LABELS"
       - name: Create Backport Issue
         uses: dacbd/create-issue-action@v1
+        id: new-issue
         with:
           token: ${{ github.token }}
           title: |
@@ -51,5 +52,5 @@ jobs:
         with:
           zenhub_token: ${{ secrets.ZENHUB_TOKEN }}
           repo_id: ${{ fromJSON(steps.repo.outputs.data).id }}
-          issue_number: ${{ github.event.issue.id }}
+          issue_number: ${{ steps.new-issue.outputs.number }}
           release_name: ${{ steps.split.outputs._1 }}

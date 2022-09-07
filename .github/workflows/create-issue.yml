@@ -19,6 +19,7 @@ jobs:
         with:
           actions: 'find-issues'
           token: ${{ github.token }}
+          issue-state: 'all'
           title-includes: |
             [BACKPORT][v${{ steps.split.outputs._1 }}]${{ github.event.issue.title }}
       - name: Get Milestone Object
@@ -78,6 +79,7 @@ jobs:
         with:
           actions: 'find-issues'
           token: ${{ github.token }}
+          issue-state: 'all'
           title-includes: |
             [TEST]${{ github.event.issue.title }}
       - name: Create Automation Test Issue

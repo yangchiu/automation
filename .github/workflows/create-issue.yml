@@ -21,12 +21,6 @@ jobs:
           token: ${{ github.token }}
           title-includes: |
             [BACKPORT][v${{ steps.split.outputs._1 }}]${{ github.event.issue.title }}
-      - name: Print
-        run: |
-          echo "${{ steps.if-backport-issue-exists.outputs.issues }}"
-          echo "${{ fromJSON(steps.if-backport-issue-exists.outputs.issues) }}"
-          echo "${{ fromJSON(steps.if-backport-issue-exists.outputs.issues)[0] }}"
-          echo "${{ fromJSON(steps.if-backport-issue-exists.outputs.issues).length }}"
       - name: Get Milestone Object
         if: fromJSON(steps.if-backport-issue-exists.outputs.issues)[0] == null
         uses: yangchiu/milestone-action@master
@@ -73,3 +67,26 @@ jobs:
           repo_id: ${{ fromJSON(steps.repo.outputs.data).id }}
           issue_number: ${{ steps.new-issue.outputs.number }}
           release_name: ${{ steps.split.outputs._1 }}
+
+  automation:
+    runs-on: ubuntu-latest
+    if: contains(github.event.label.name, 'require/automation-e2e')
+    steps:
+      - name: Check if Automation Issue Exists
+        uses: actions-cool/issues-helper@v3
+        id: if-automation-issue-exists
+        with:
+          actions: 'find-issues'
+          token: ${{ github.token }}
+          title-includes: |
+            [TEST]${{ github.event.issue.title }}
+      - name: Create Automation Test Issue
+        if: fromJSON(steps.if-automation-issue-exists.outputs.issues)[0] == null
+        uses: dacbd/create-issue-action@v1
+        with:
+          token: ${{ github.token }}
+          title: |
+            [TEST]${{ github.event.issue.title }}
+          body: |
+            adding/updating auto e2e test cases for ${{ github.event.issue.html_url }} if they can be automated
+          assignees: ${{ join(github.event.issue.assignees.*.login, ', ') }}

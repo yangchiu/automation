@@ -13,7 +13,22 @@ jobs:
         with:
           string: ${{ github.event.label.name }}
           separator: /
+      - name: Check if Backport Issue Exists
+        uses: actions-cool/issues-helper@v3
+        id: if-backport-issue-exists
+        with:
+          actions: 'find-issues'
+          token: ${{ github.token }}
+          title-includes: |
+            [BACKPORT][v${{ steps.split.outputs._1 }}]${{ github.event.issue.title }}
+      - name: Print
+        run: |
+          echo "${{ steps.if-backport-issue-exists.outputs.issues }}"
+          echo "${{ fromJSON(steps.if-backport-issue-exists.outputs.issues) }}"
+          echo "${{ fromJSON(steps.if-backport-issue-exists.outputs.issues)[0] }}"
+          echo "${{ fromJSON(steps.if-backport-issue-exists.outputs.issues).length }}"
       - name: Get Milestone Object
+        if: fromJSON(steps.if-backport-issue-exists.outputs.issues)[0] == null
         uses: yangchiu/milestone-action@master
         id: milestone
         with:
@@ -21,6 +36,7 @@ jobs:
           repository: ${{ github.repository }}
           milestone_name: v${{ steps.split.outputs._1 }}
       - name: Get Labels
+        if: fromJSON(steps.if-backport-issue-exists.outputs.issues)[0] == null
         id: labels
         run: |
           RAW_LABELS="${{ join(github.event.issue.labels.*.name, ' ') }}"
@@ -29,6 +45,7 @@ jobs:
           echo "LABELS: $LABELS"
           echo "::set-output name=labels::$LABELS"
       - name: Create Backport Issue
+        if: fromJSON(steps.if-backport-issue-exists.outputs.issues)[0] == null
         uses: dacbd/create-issue-action@v1
         id: new-issue
         with:
@@ -41,6 +58,7 @@ jobs:
           milestone: ${{ fromJSON(steps.milestone.outputs.data).number }}
           assignees: ${{ join(github.event.issue.assignees.*.login, ', ') }}
       - name: Get Repo Id
+        if: fromJSON(steps.if-backport-issue-exists.outputs.issues)[0] == null
         uses: octokit/request-action@v2.x
         id: repo
         with:
@@ -48,6 +66,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
       - name: Add Backport Issue To Release
+        if: fromJSON(steps.if-backport-issue-exists.outputs.issues)[0] == null
         uses: yangchiu/add-zenhub-release-action@master
         with:
           zenhub_token: ${{ secrets.ZENHUB_TOKEN }}

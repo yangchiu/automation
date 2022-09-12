@@ -24,7 +24,7 @@ jobs:
             [BACKPORT][v${{ steps.split.outputs._1 }}]${{ github.event.issue.title }}
       - name: Get Milestone Object
         if: fromJSON(steps.if-backport-issue-exists.outputs.issues)[0] == null
-        uses: yangchiu/milestone-action@master
+        uses: longhorn/bot/milestone-action@master
         id: milestone
         with:
           token: ${{ github.token }}
@@ -62,7 +62,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
       - name: Add Backport Issue To Release
         if: fromJSON(steps.if-backport-issue-exists.outputs.issues)[0] == null
-        uses: yangchiu/add-zenhub-release-action@master
+        uses: longhorn/bot/add-zenhub-release-action@master
         with:
           zenhub_token: ${{ secrets.ZENHUB_TOKEN }}
           repo_id: ${{ fromJSON(steps.repo.outputs.data).id }}

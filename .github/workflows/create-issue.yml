@@ -24,7 +24,7 @@ jobs:
             [BACKPORT][v${{ steps.split.outputs._1 }}]${{ github.event.issue.title }}
       - name: Get Milestone Object
         if: fromJSON(steps.if-backport-issue-exists.outputs.issues)[0] == null
-        uses: longhorn/bot/milestone-action@master
+        uses: yangchiu/milestone-action@master
         id: milestone
         with:
           token: ${{ github.token }}

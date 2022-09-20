@@ -7,6 +7,9 @@ jobs:
     runs-on: ubuntu-latest
     if: contains(github.event.label.name, 'backport-needed')
     steps:
+      - name: Shell
+        run: |
+          echo "${{ github.event.issue.user.login }}"
       - name: Get Backport Version
         uses: xom9ikk/split@v1
         id: split
@@ -92,4 +95,6 @@ jobs:
             [TEST]${{ github.event.issue.title }}
           body: |
             adding/updating auto e2e test cases for ${{ github.event.issue.html_url }} if they can be automated
-          assignees: ${{ join(github.event.issue.assignees.*.login, ', ') }}
+            
+            cc @deersheep330 @yangchiu @longhorn/qa
+          labels: kind/test

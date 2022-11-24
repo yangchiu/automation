@@ -45,16 +45,16 @@ jobs:
           echo "::set-output name=labels::$LABELS"
       - name: Create Backport Issue
         if: fromJSON(steps.if-backport-issue-exists.outputs.issues)[0] == null
-        uses: dacbd/create-issue-action@v1
         id: new-issue
+        uses: actions-cool/issues-helper@v3
         with:
+          actions: 'create-issue'
           token: ${{ github.token }}
           title: |
             [BACKPORT][v${{ steps.split.outputs._1 }}]${{ github.event.issue.title }}
           body: |
             backport ${{ github.event.issue.html_url }}
           labels: ${{ steps.labels.outputs.labels }}
-          milestone: ${{ fromJSON(steps.milestone.outputs.data).number }}
           assignees: ${{ join(github.event.issue.assignees.*.login, ', ') }}
       - name: Get Repo Id
         if: fromJSON(steps.if-backport-issue-exists.outputs.issues)[0] == null
